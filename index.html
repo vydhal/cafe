@@ -4170,11 +4170,10 @@ function filtrarPorCategoria(categoria) {
 function finalizarPedido() {
     console.log('Finalizando pedido');
 
-    // Obter dados do formulário
+    // 1. COLETAR DADOS DO FORMULÁRIO (Lógica existente, sem alterações)
     const nomeCliente = document.getElementById('nome-cliente').value.trim();
     const observacaoGeral = document.getElementById('observacao-geral').value.trim();
 
-    // Obter dados específicos conforme opção selecionada
     let metodoEnvio = '';
     let enderecoEntrega = '';
     let mesaComanda = '';
@@ -4188,8 +4187,6 @@ function finalizarPedido() {
     } else if (opcaoEntregaSelecionada === 'delivery') {
         metodoEnvio = 'Delivery';
         enderecoEntrega = document.getElementById('endereco-entrega').value.trim();
-
-        // Validar endereço para delivery
         if (!enderecoEntrega) {
             alert('Por favor, informe o endereço de entrega para continuar.');
             document.getElementById('endereco-entrega').focus();
@@ -4199,14 +4196,12 @@ function finalizarPedido() {
         metodoEnvio = 'Retirada no Local';
     }
 
-    // Validar nome do cliente (obrigatório)
     if (!nomeCliente) {
         alert('Por favor, informe seu nome para continuar.');
         document.getElementById('nome-cliente').focus();
         return;
     }
 
-    // Obter itens do carrinho
     const carrinho = JSON.parse(localStorage.getItem('carrinho') || '[]');
     if (carrinho.length === 0) {
         alert('Seu carrinho está vazio. Adicione itens para fazer um pedido.');
@@ -4214,138 +4209,116 @@ function finalizarPedido() {
         return;
     }
 
-    // Montar a mensagem para o WhatsApp (mantida para compatibilidade, mas o foco é o Apps Script)
-    let mensagemWhatsApp = `🔔 *NOVO PEDIDO* 🔔\n\n`;
-
-    // Data e hora do pedido
-    const agora = new Date();
-    const dataFormatada = agora.toLocaleDateString('pt-BR');
-    const horaFormatada = agora.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
-    mensagemWhatsApp += `📅 *Data*: ${dataFormatada}\n⏰ *Hora*: ${horaFormatada}\n\n`;
-
-    // Dados do cliente
-    mensagemWhatsApp += `👤 *DADOS DO CLIENTE*\n`;
-    mensagemWhatsApp += `➡️ *Nome*: ${nomeCliente}\n`;
-
     let formaPagamentoTexto = '';
     const formaPagamentoSelect = document.getElementById('forma-pagamento');
     if (formaPagamentoSelect && formaPagamentoSelect.value && formaPagamentoSelect.value !== '') {
         formaPagamentoTexto = formaPagamentoSelect.options[formaPagamentoSelect.selectedIndex].text;
-        mensagemWhatsApp += `💳 *Pagamento*: ${formaPagamentoTexto}\n`;
-
-        // Verificar se é pagamento em dinheiro e se precisa de troco
-        if (formaPagamentoSelect.value.toLowerCase() === 'dinheiro') {
-            const precisaTroco = document.querySelector('input[name="precisa-troco"]:checked');
-            if (precisaTroco && precisaTroco.value === 'sim') {
-                const valorTroco = document.getElementById('valor-troco');
-                if (valorTroco && valorTroco.value.trim()) {
-                    mensagemWhatsApp += `💰 *Troco para*: ${valorTroco.value.trim()}\n`;
-                } else {
-                    mensagemWhatsApp += `💰 *Precisa de troco*: Sim\n`;
-                }
-            } else if (precisaTroco) {
-                mensagemWhatsApp += `💰 *Precisa de troco*: Não\n`;
-            }
-        }
     }
 
-    // Método de envio e dados específicos para WhatsApp
-    if (metodoEnvio === 'Consumo no Local') {
-        mensagemWhatsApp += `\n🍽️ *Consumo no Local*\n`;
-        if (mesaComanda) {
-            mensagemWhatsApp += `📌 *Mesa/Comanda*: ${mesaComanda}\n`;
-        }
-    } else if (metodoEnvio === 'Delivery') {
-        mensagemWhatsApp += `\n🚗 *Entrega - Delivery*\n`;
-        if (enderecoEntrega) {
-            mensagemWhatsApp += `🏠 *Endereço*: ${enderecoEntrega}\n`;
-        }
-    } else if (metodoEnvio === 'Retirada no Local') {
-        mensagemWhatsApp += `\n🛍️ *Cliente vai Retirar no Local*\n`;
-    }
+    // 2. MONTAR O OBJETO DE DADOS PARA O BACKEND
+    const itensParaBackend = carrinho.map(item => ({
+        quantidade: item.quantidade,
+        titulo: item.titulo,
+        observacao: item.observacao || ''
+    }));
 
-    // Observações gerais para WhatsApp
-    if (observacaoGeral) {
-        mensagemWhatsApp += `\n💬 *OBSERVAÇÕES*\n${observacaoGeral}\n`;
-    }
-
-    // Lista de itens para WhatsApp
-    mensagemWhatsApp += `\n🛒 *ITENS DO PEDIDO*\n`;
-    const itensParaAppsScript = carrinho.map(item => {
-        let itemDesc = `${item.quantidade}x ${item.titulo}`;
-        if (item.observacao) {
-            itemDesc += ` (Obs: ${item.observacao})`;
-        }
-        mensagemWhatsApp += `\n- ${itemDesc}`;
-        return {
-            quantidade: item.quantidade,
-            titulo: item.titulo,
-            observacao: item.observacao // Incluir observação do item para o Apps Script
-        };
-    });
-
-    mensagemWhatsApp += `\n\n✅ *Pedido Finalizado* - Aguardando confirmação do estabelecimento\n`;
-    mensagemWhatsApp += `\n👍 Obrigado pela preferência!`;
-
-    // --- PARTE NOVA: ENVIAR PARA O APPS SCRIPT ---
-    const appScriptURL = 'https://script.google.com/macros/s/AKfycby0DlY7KbvmhaabMuxLDXOe2tRc6X3vG8WTldzAXRhMrR_vJPwS-b32aZQA86q2pxreFA/exec'; // Seu URL do Apps Script
-
-    const dadosParaAppsScript = {
+    const dadosParaBackend = {
         clienteNome: nomeCliente,
         metodoEnvio: metodoEnvio,
-        itens: itensParaAppsScript,
+        itens: itensParaBackend,
         formaPagamento: formaPagamentoTexto,
         observacaoGeral: observacaoGeral,
-        // Adicionar endereço ou mesa/comanda se aplicável
         endereco: enderecoEntrega,
         mesaComanda: mesaComanda
     };
 
-    console.log('Enviando dados para o Apps Script:', dadosParaAppsScript );
+    // 3. ENVIAR DADOS PARA O BACKEND NO VERCEL
+    // O URL agora é relativo ao seu próprio site, o que elimina problemas de CORS.
+    const backendUrl = '/api/registrar-pedido';
 
-    fetch(appScriptURL, {
+    console.log('Enviando dados para o backend do Vercel:', dadosParaBackend);
+
+    // Adicionar um feedback visual para o usuário enquanto o pedido está sendo processado
+    const botaoEnviar = document.getElementById('botao-enviar');
+    botaoEnviar.disabled = true;
+    botaoEnviar.innerHTML = 'Enviando... <span class="animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2"></span>';
+
+    fetch(backendUrl, {
         method: 'POST',
-        mode: 'cors', // Importante para requisições entre domínios
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify(dadosParaAppsScript),
+        body: JSON.stringify(dadosParaBackend),
     })
     .then(response => {
+        // Se a resposta não for OK, tenta ler o erro do corpo JSON para dar um feedback melhor
         if (!response.ok) {
-            throw new Error(`Erro HTTP! Status: ${response.status}`);
+            return response.json().then(err => {
+                // Lança um erro com a mensagem do servidor, se houver, ou uma mensagem padrão
+                throw new Error(err.error || `Erro no servidor: ${response.statusText}`);
+            });
         }
         return response.json();
     })
     .then(data => {
-        console.log('Resposta do Apps Script:', data);
-        if (data.result === "Pedido registrado!") {
-            alert('Seu pedido foi registrado com sucesso!');
-            // Limpar carrinho e resetar formulário após o registro bem-sucedido
-            localStorage.removeItem('carrinho');
-            atualizarContadorCarrinho();
-            resetarFormulario();
-            fecharModal();
+        console.log('Resposta do backend:', data);
+        alert('Seu pedido foi registrado com sucesso!');
 
-            // Enviar mensagem para o WhatsApp após o registro no Sheets
-            const numeroWhatsApp = dadosGlobais.config['WhatsApp'];
-            if (numeroWhatsApp) {
-                const numeroLimpo = numeroWhatsApp.replace(/\D/g, '');
-                const mensagemCodificada = encodeURIComponent(mensagemWhatsApp);
-                enviarPedidoWhatsApp(numeroLimpo, mensagemCodificada);
-            } else {
-                alert('Número de WhatsApp não configurado. Pedido registrado, mas não enviado via WhatsApp.');
+        // 4. LIMPAR TUDO E ENVIAR PARA O WHATSAPP (APÓS SUCESSO)
+        localStorage.removeItem('carrinho');
+        atualizarContadorCarrinho();
+        resetarFormulario();
+        fecharModal();
+
+        // Montar a mensagem para o WhatsApp (aqui, pois só deve ser enviada após o sucesso)
+        let mensagemWhatsApp = `🔔 *NOVO PEDIDO* 🔔\n\n` +
+            `📅 *Data*: ${new Date().toLocaleDateString('pt-BR')}\n` +
+            `⏰ *Hora*: ${new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}\n\n` +
+            `👤 *DADOS DO CLIENTE*\n` +
+            `➡️ *Nome*: ${nomeCliente}\n`;
+
+        if (formaPagamentoTexto) {
+            mensagemWhatsApp += `💳 *Pagamento*: ${formaPagamentoTexto}\n`;
+        }
+        if (metodoEnvio === 'Consumo no Local' && mesaComanda) {
+            mensagemWhatsApp += `\n🍽️ *Consumo no Local*\n📌 *Mesa/Comanda*: ${mesaComanda}\n`;
+        } else if (metodoEnvio === 'Delivery' && enderecoEntrega) {
+            mensagemWhatsApp += `\n🚗 *Entrega - Delivery*\n🏠 *Endereço*: ${enderecoEntrega}\n`;
+        } else if (metodoEnvio === 'Retirada no Local') {
+            mensagemWhatsApp += `\n🛍️ *Cliente vai Retirar no Local*\n`;
+        }
+        if (observacaoGeral) {
+            mensagemWhatsApp += `\n💬 *OBSERVAÇÕES*\n${observacaoGeral}\n`;
+        }
+        mensagemWhatsApp += `\n🛒 *ITENS DO PEDIDO*\n`;
+        itensParaBackend.forEach(item => {
+            let itemDesc = `${item.quantidade}x ${item.titulo}`;
+            if (item.observacao) {
+                itemDesc += ` (Obs: ${item.observacao})`;
             }
+            mensagemWhatsApp += `- ${itemDesc}\n`;
+        });
+        mensagemWhatsApp += `\n👍 Obrigado pela preferência!`;
 
-        } else if (data.error) {
-            alert('Erro ao registrar pedido: ' + data.error);
+        // Enviar para o WhatsApp
+        const numeroWhatsApp = dadosGlobais.config['WhatsApp'];
+        if (numeroWhatsApp) {
+            const numeroLimpo = numeroWhatsApp.replace(/\D/g, '');
+            const mensagemCodificada = encodeURIComponent(mensagemWhatsApp);
+            enviarPedidoWhatsApp(numeroLimpo, mensagemCodificada);
         } else {
-            alert('Resposta inesperada do servidor.');
+            console.warn('Número de WhatsApp não configurado.');
         }
     })
     .catch(error => {
-        console.error('Erro ao enviar pedido para o Apps Script:', error);
-        alert('Ocorreu um erro ao enviar seu pedido. Por favor, tente novamente.');
+        console.error('Erro ao enviar pedido para o backend:', error);
+        // Exibe a mensagem de erro específica que veio do servidor ou do fetch
+        alert('Ocorreu um erro ao enviar seu pedido: ' + error.message);
+    })
+    .finally(() => {
+        // Restaura o botão de envio, independentemente de sucesso ou falha
+        botaoEnviar.disabled = false;
+        botaoEnviar.innerHTML = 'Enviar Pedido <svg>...</svg>'; // Recoloque o ícone original se houver
     });
 }
 
